@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch
+  labels:
+    app: elastic
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elastic
+  template:
+    metadata:
+      labels:
+        app: elastic  
+    spec:
+      containers:
+      - name: elasticsearch
+        image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.10.2-amd64
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2048Mi
+          limits:
+            memory: "2049Mi"
+            cpu: "600m" 
+        ports:
+          - containerPort: 9200
+          - containerPort: 9300
+        env:
+            - name: discovery.type
+              value: "single-node"
+            - name: bootstrap.memory_lock
+              value: "true" 
+            - name: ES_JAVA_OPTS
+              value: "-Xms512m -Xmx512m" 
+       

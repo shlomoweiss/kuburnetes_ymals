@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: elasticsearch-output
+data:
+  fluentd.conf: |
+    <system>
+      log_level trace
+    </system>
+    # Ignore fluentd own events
+    <match fluent.**>
+      @type null
+    </match>
+     
+    @include fluentd-inputs.conf
+    @include fluentd-output.conf
+  fluentd-inputs.conf: |  
+    # HTTP input for the liveness and readiness probes
+    <source>
+      @type http
+      bind 0.0.0.0
+      port 9880
+    </source>
+    
+    # Get the logs from the containers running in the cluster
+    # This block parses logs using an expression valid for the Apache log format
+    # Update this depending on your application log format
+    <source>
+      @type tail
+      path /var/log/containers/*.log,
+      pos_file /opt/bitnami/fluentd/logs/buffers/fluentd-docker.pos
+      read_from_head true
+      tag kubernetese.*
+      <parse>
+        @type json
+         #time_format "%Y-%m-%dT%H:%M:%S.%N"
+         #time_format %d/%b/%Y:%H:%M:%S %z
+         #keep_time_key true
+         time_key @timestamp
+        #@type multi_format
+         #  <pattern>
+          #   format json
+           #  time_format %d/%b/%Y:%H:%M:%S %z
+            # keep_time_key true
+           #</pattern>
+           #<pattern>
+            # format regexp
+             #expression /^(?<host>[^ ]*) [^ ]* (?<user>[^ ]*) \[(?<time>[^\]]*)\] \\"(?<method>\S+)(?: +(?<path>[^ ]*) +\S*)?\\" (?<code>[^ ]*) (?<size>[^ ]*)(?: "(?<referer>[^\"]*)" "(?<agent>[^\"]*)")?$/
+             #time_format %d/%b/%Y:%H:%M:%S %z
+          #</pattern>
+      </parse>
+    </source>
+    
+  fluentd-output.conf: |  
+    <filter kubernetese.**>
+        @type kubernetes_metadata
+    </filter>
+    # Throw the healthcheck to the standard output instead of forwarding it
+    <match fluentd.healthcheck>
+      @type stdout
+    </match>
+
+    # Send the logs to the standard output
+    <match **>
+      @type elasticsearch
+      include_tag_key true
+      host "#{ENV['ELASTICSEARCH_HOST']}"
+      port "#{ENV['ELASTICSEARCH_PORT']}"
+      index_name logstash.${tag}.%Y%m%d
+      <buffer>
+        @type file
+        path /opt/bitnami/fluentd/logs/buffers/logs.buffer
+        flush_thread_count 2
+        flush_interval 5s
+      </buffer>
+    </match>
